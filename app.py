@@ -3,28 +3,45 @@ import pandas as pd
 import streamlit as st
 import streamlit as st
 
-# CSS Avanzado e inyectado con fuerza para ocultar la barra y banners sin romper la Sidebar
-hide_streamlit_cloud_elements = """
+# Solución definitiva para móviles: rescata la Sidebar y destruye los banners inferiores
+fixed_streamlit_mobile = """
 <style>
-/* 1. Ocultar los botones de Fork, GitHub y opciones, PERO mantener visible el botón del menú lateral */
+/* 1. Ocultar los botones molestos de arriba (Fork, GitHub y 3 puntos), pero SIN romper el contenedor */
 [data-testid="stHeader"] > div:first-child {
     display: none !important;
 }
 
-/* 2. Forzar la ocultación del banner flotante inferior derecho (icono de corona / Streamlit Cloud) */
-[data-testid="stDeploymentActions"],
-.stDeploymentActions,
-div[class*="stDeploymentActions"] {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    width: 0 !important;
+/* 2. FORZAR el botón del menú lateral (Sidebar) para que flote fijamente en la esquina superior izquierda en celulares */
+[data-testid="stSidebarCollapseMobile"] {
+    position: fixed !important;
+    top: 15px !important;
+    left: 15px !important;
+    z-index: 999999 !important;
+    display: flex !important;
+    background-color: #1E293B !important; /* Color oscuro para que combine con tu fondo */
+    border-radius: 8px !important;
+    padding: 5px !important;
 }
 
-/* 3. Eliminar el pie de página nativo 'Made with Streamlit' */
+/* 3. ELIMINAR por completo los banners inferiores (Botón de corona roja, Hosted with Streamlit y overlays) */
 footer {
-    visibility: hidden !important;
     display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+}
+
+[data-testid="stDeploymentActions"],
+.stDeploymentActions,
+div[class*="stDeploymentActions"],
+div[class*="viewerBadge"],
+.viewerBadge_container__176m1,
+iframe[title="Managed Frontend"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    left: -9999px !important; /* Si el navegador lo fuerza a renderizar, lo mandamos fuera de la pantalla */
 }
 </style>
 """
@@ -42,8 +59,8 @@ st.set_page_config(
     layout="wide",
 )
 
-# Asegúrate de colocar esta línea al principio de tu script, justo después de st.set_page_config
-st.markdown(hide_streamlit_cloud_elements, unsafe_allow_html=True)
+# Esta línea al principio de script, justo después de st.set_page_config
+st.markdown(fixed_streamlit_mobile, unsafe_allow_html=True)
 
 st.title("📊 Conciliación Fiscal SAT y Diagnóstico Financiero")
 st.caption("Procesamiento automático desde XML / OneFacture")
