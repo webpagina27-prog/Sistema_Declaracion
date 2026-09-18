@@ -3,30 +3,28 @@ import pandas as pd
 import streamlit as st
 import streamlit as st
 
-# Código CSS actualizado para ocultar la barra superior y los banners inferiores de Streamlit Cloud
-hide_modern_streamlit = """
+# CSS Avanzado e inyectado con fuerza para ocultar la barra y banners sin romper la Sidebar
+hide_streamlit_cloud_elements = """
 <style>
-/* 1. Ocultar la barra superior completa (incluye Fork, GitHub e icono de tres puntos) */
-[data-testid="stHeader"] {
+/* 1. Ocultar los botones de Fork, GitHub y opciones, PERO mantener visible el botón del menú lateral */
+[data-testid="stHeader"] > div:first-child {
     display: none !important;
 }
 
-/* 2. Ocultar el espacio en blanco superior que deja la barra eliminada */
-.main .block-container {
-    padding-top: 1rem !important;
-}
-
-/* 3. Ocultar el banner flotante inferior derecho de Streamlit Cloud (icono de corona/servicios) */
-div[class^="st-emotion-cache"] > iframe, 
-.viewerBadge_container__176m1, 
-[data-testid="stDeploymentActions"] {
+/* 2. Forzar la ocultación del banner flotante inferior derecho (icono de corona / Streamlit Cloud) */
+[data-testid="stDeploymentActions"],
+.stDeploymentActions,
+div[class*="stDeploymentActions"] {
     display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
 }
 
-/* 4. Ocultar el pie de página nativo 'Made with Streamlit' */
+/* 3. Eliminar el pie de página nativo 'Made with Streamlit' */
 footer {
     visibility: hidden !important;
-    height: 0px !important;
+    display: none !important;
 }
 </style>
 """
@@ -45,7 +43,7 @@ st.set_page_config(
 )
 
 # Asegúrate de colocar esta línea al principio de tu script, justo después de st.set_page_config
-st.markdown(hide_modern_streamlit, unsafe_allow_html=True)
+st.markdown(hide_streamlit_cloud_elements, unsafe_allow_html=True)
 
 st.title("📊 Conciliación Fiscal SAT y Diagnóstico Financiero")
 st.caption("Procesamiento automático desde XML / OneFacture")
