@@ -1,6 +1,44 @@
 import io
 import pandas as pd
 import streamlit as st
+import streamlit as st
+
+# Código CSS actualizado para ocultar la barra superior y los banners inferiores de Streamlit Cloud
+hide_modern_streamlit = """
+<style>
+/* 1. Ocultar la barra superior completa (incluye Fork, GitHub e icono de tres puntos) */
+[data-testid="stHeader"] {
+    display: none !important;
+}
+
+/* 2. Ocultar el espacio en blanco superior que deja la barra eliminada */
+.main .block-container {
+    padding-top: 1rem !important;
+}
+
+/* 3. Ocultar el banner flotante inferior derecho de Streamlit Cloud (icono de corona/servicios) */
+div[class^="st-emotion-cache"] > iframe, 
+.viewerBadge_container__176m1, 
+[data-testid="stDeploymentActions"] {
+    display: none !important;
+}
+
+/* 4. Ocultar el pie de página nativo 'Made with Streamlit' */
+footer {
+    visibility: hidden !important;
+    height: 0px !important;
+}
+</style>
+"""
+
+# Asegúrate de colocar esta línea al principio de tu script, justo después de st.set_page_config
+st.markdown(hide_modern_streamlit, unsafe_allow_html=True)
+
+
+# ==========================================
+# INICIO DEL SISTEMA
+# ==========================================
+
 
 st.set_page_config(
     page_title="Conciliación Fiscal SAT y Diagnóstico Financiero",
