@@ -31,8 +31,7 @@ footer {
 </style>
 """
 
-# Asegúrate de colocar esta línea al principio de tu script, justo después de st.set_page_config
-st.markdown(hide_modern_streamlit, unsafe_allow_html=True)
+
 
 
 # ==========================================
@@ -44,6 +43,9 @@ st.set_page_config(
     page_title="Conciliación Fiscal SAT y Diagnóstico Financiero",
     layout="wide",
 )
+
+# Asegúrate de colocar esta línea al principio de tu script, justo después de st.set_page_config
+st.markdown(hide_modern_streamlit, unsafe_allow_html=True)
 
 st.title("📊 Conciliación Fiscal SAT y Diagnóstico Financiero")
 st.caption("Procesamiento automático desde XML / OneFacture")
