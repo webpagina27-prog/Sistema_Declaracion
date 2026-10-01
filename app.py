@@ -518,11 +518,10 @@ with tab_mensual:
 
 with tab_anual:
     st.header("📅 Módulo de Declaración Anual - Personas Físicas")
-    st.caption("Clasificación automática y agrupación de deducciones autorizadas según los rubros oficiales del portal del SAT.")
+    st.caption("Consolidación fiscal estricta: PUE directos + PPD validados y efectivamente pagados mediante REP.")
 
-    # Verificamos si existen datos cargados previamente en el sistema mensual
     if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
-        st.success("✅ ¡Datos del ejercicio cargados correctamente desde el módulo mensual!")
+        st.success("✅ ¡Datos del ejercicio cargados correctamente!")
 
         df_anual_emi = st.session_state["df_emi_f_raw"].copy()
         df_anual_rec = st.session_state["df_rec_f_raw"].copy()
@@ -553,13 +552,8 @@ with tab_anual:
             iva_anual_ingresos += iva_rep_anual
 
         # ==========================================
-        # 2. CLASIFICACIÓN DE GASTOS POR RUBRO SAT
+        # 2. FUNCIÓN DE CLASIFICACIÓN SAT
         # ==========================================
-        rec_pue_anual = df_anual_rec[
-            (df_anual_rec["Metodo pago"].astype(str).str.startswith("PUE"))
-            & (df_anual_rec["Tipo"].astype(str).str.startswith("I"))
-        ].copy()
-
         def clasificar_gasto_sat(row):
             texto_completo = ""
             for col in ["ClaveProdServ", "Conceptos", "Descripcion", "Concepto"]:
@@ -567,7 +561,9 @@ with tab_anual:
                     texto_completo += str(row[col]) + " "
             texto_completo = texto_completo.upper()
 
-            if "1510" in texto_completo or "COMBUSTIBLE" in texto_completo or "GASOLINA" in texto_completo or "DIESEL" in texto_completo:
+            if "ALMACEN" in texto_completo or "MERCANCIA" in texto_completo or "INVENTARIO" in texto_completo or "SUMINISTROS" in texto_completo or "MATERIALES" in texto_completo:
+                return "Almacén / Mercancías / Insumos"
+            elif "1510" in texto_completo or "COMBUSTIBLE" in texto_completo or "GASOLINA" in texto_completo or "DIESEL" in texto_completo:
                 return "Combustibles y lubricantes"
             elif "HONORARIOS" in texto_completo or "SERVICIOS PROFESIONALES" in texto_completo:
                 return "Honorarios"
@@ -578,25 +574,81 @@ with tab_anual:
             else:
                 return "Gastos generales"
 
-        rec_pue_anual["Rubro_SAT"] = rec_pue_anual.apply(clasificar_gasto_sat, axis=1)
+        # Asignar rubro a todas las facturas recibidas de tipo Ingreso
+        df_anual_rec["Rubro_SAT"] = df_anual_rec.apply(clasificar_gasto_sat, axis=1)
 
-        col_iva_rec_anual = next((c for c in rec_pue_anual.columns if "iva trasladado 16%" in c.lower() or "iva 16%" in c.lower()), None)
-        if col_iva_rec_anual:
-            rec_pue_anual["_iva_monto"] = pd.to_numeric(rec_pue_anual[col_iva_rec_anual], errors="coerce").fillna(0)
-        else:
-            rec_pue_anual["_iva_monto"] = 0.0
-
-        sub_anual_gastos = float(rec_pue_anual["SubTotal"].sum())
+        # Detectar columna IVA
+        col_iva_rec = next((c for c in df_anual_rec.columns if "iva trasladado 16%" in c.lower() or "iva 16%" in c.lower()), None)
+        df_anual_rec["_iva_monto"] = pd.to_numeric(df_anual_rec[col_iva_rec], errors="coerce").fillna(0) if col_iva_rec else 0.0
 
         # ==========================================
-        # 3. MÉTRICAS Y RESULTADOS ANUALES
+        # 3. SEPARACIÓN PUE (Deducibles al 100%) Y PPD (Validados por REP)
+        # ==========================================
+        # Gasto PUE de tipo Ingreso
+        pue_gastos = df_anual_rec[
+            (df_anual_rec["Metodo pago"].astype(str).str.startswith("PUE")) & 
+            (df_anual_rec["Tipo"].astype(str).str.startswith("I"))
+        ].copy()
+
+        # Gastos PPD que requieren REP
+        ppd_gastos = df_anual_rec[
+            (df_anual_rec["Metodo pago"].astype(str).str.startswith("PPD")) & 
+            (df_anual_rec["Tipo"].astype(str).str.startswith("I"))
+        ].copy()
+
+        lista_gastos_efectivos = [pue_gastos]
+
+        # Si existen REP recibidos en sesión, cruzamos montos pagados
+        if "df_rec_p_raw" in st.session_state and not st.session_state["df_rec_p_raw"].empty:
+            df_rec_p = st.session_state["df_rec_p_raw"].copy()
+            if "Estado" in df_rec_p.columns:
+                df_rec_p = df_rec_p[df_rec_p["Estado"] == "VIGENTE"]
+
+            # Identificar columnas clave en REP recibidos (Folio/UUID relacionado y Monto pagado)
+            col_id_rel = next((c for c in df_rec_p.columns if "idpago" in c.lower() or "docto" in c.lower() or "uuid" in c.lower() and "relacionado" in c.lower()), None)
+            col_imp_pagado = next((c for c in df_rec_p.columns if "impago" in c.lower() or "importepagado" in c.lower() or "monto" in c.lower()), None)
+            col_uuid_factura = "UUID" if "UUID" in df_anual_rec.columns else None
+
+            if col_id_rel and col_imp_pagado and col_uuid_factura:
+                # Agrupamos pagos por factura relacionada
+                pagos_por_factura = df_rec_p.groupby(col_id_rel)[col_imp_pagado].sum().reset_index()
+                
+                # Hacemos merge con las facturas PPD para rescatar las que tuvieron pagos
+                ppd_pagadas = pd.merge(
+                    ppd_gastos, 
+                    pagos_por_factura, 
+                    left_on=col_uuid_factura, 
+                    right_on=col_id_rel, 
+                    how="inner"
+                )
+
+                if not ppd_pagadas.empty:
+                    # Ajustamos proporcionalmente el SubTotal e IVA en función de lo que realmente se pagó respecto al Total original
+                    if "Total" in ppd_pagadas.columns:
+                        ppd_pagadas["Factor_Pagado"] = pd.to_numeric(ppd_pagadas[col_imp_pagado], errors="coerce") / pd.to_numeric(ppd_pagadas["Total"], errors="coerce").replace(0, 1)
+                        ppd_pagadas["Factor_Pagado"] = ppd_pagadas["Factor_Pagado"].clip(upper=1.0)
+                        
+                        ppd_pagadas["SubTotal"] = ppd_pagadas["SubTotal"] * ppd_pagadas["Factor_Pagado"]
+                        ppd_pagadas["_iva_monto"] = ppd_pagadas["_iva_monto"] * ppd_pagadas["Factor_Pagado"]
+                        if "Total" in ppd_pagadas.columns:
+                            ppd_pagadas["Total"] = ppd_pagadas[col_imp_pagado]
+
+                    lista_gastos_efectivos.append(ppd_pagadas)
+
+        # Unificar todos los gastos efectivamente deducibles (PUE + PPD pagados)
+        rec_efectivo_anual = pd.concat(lista_gastos_efectivos, ignore_index=True) if lista_gastos_efectivos else pue_gastos
+
+        sub_anual_gastos = float(rec_efectivo_anual["SubTotal"].sum())
+
+        # ==========================================
+        # 4. MÉTRICAS Y RESULTADOS ANUALES
         # ==========================================
         st.divider()
         st.subheader("📊 Balance Consolidado del Ejercicio Anual")
 
         ac1, ac2, ac3 = st.columns(3)
         ac1.metric("Ingresos Acumulables Anuales", f"${sub_anual_ingresos:,.2f}")
-        ac2.metric("Deducciones Autorizadas Anuales", f"${sub_anual_gastos:,.2f}")
+        ac2.metric("Deducciones Autorizadas (Efectivamente Pagadas)", f"${sub_anual_gastos:,.2f}")
         utilidad_anual = sub_anual_ingresos - sub_anual_gastos
         ac3.metric(
             "Utilidad Fiscal Anual", 
@@ -606,45 +658,39 @@ with tab_anual:
         )
 
         # ==========================================
-        # 4. TABLA RESUMEN POR RUBRO SAT
+        # 5. TABLA RESUMEN POR RUBRO SAT
         # ==========================================
         st.divider()
         st.subheader("📑 Deducciones Autorizadas Agrupadas por Rubro del SAT")
-        st.caption("Montos listados para el llenado de la declaración anual conforme a los conceptos oficiales:")
 
-        if not rec_pue_anual.empty:
-            resumen_rubros_sat = rec_pue_anual.groupby("Rubro_SAT").agg(
-                No_Facturas=("SubTotal", "count"),
+        if not rec_efectivo_anual.empty:
+            resumen_rubros_sat = rec_efectivo_anual.groupby("Rubro_SAT").agg(
+                No_Comprobantes=("SubTotal", "count"),
                 Subtotal_Deducible=("SubTotal", "sum"),
-                IVA_Asociado=("_iva_monto", "sum"),
-                Total_Global=("Total", "sum") if "Total" in rec_pue_anual.columns else ("SubTotal", "sum")
+                IVA_Asociado=("_iva_monto", "sum")
             ).reset_index()
 
             resumen_rubros_sat = resumen_rubros_sat.sort_values(by="Subtotal_Deducible", ascending=False)
             st.table(resumen_rubros_sat)
 
-            # ==========================================
-            # 5. DETALLE E INTERACCIÓN POR RUBRO
-            # ==========================================
-            st.subheader("🔍 Depuración de Facturas por Rubro SAT")
-            cat_seleccionada = st.selectbox("Selecciona la categoría para revisar sus facturas individuales:", resumen_rubros_sat["Rubro_SAT"].tolist())
+            st.subheader("🔍 Depuración de Deducciones por Rubro SAT")
+            cat_seleccionada = st.selectbox("Selecciona la categoría para revisar los comprobantes:", resumen_rubros_sat["Rubro_SAT"].tolist())
 
-            df_detalle_cat = rec_pue_anual[rec_pue_anual["Rubro_SAT"] == cat_seleccionada]
+            df_detalle_cat = rec_efectivo_anual[rec_efectivo_anual["Rubro_SAT"] == cat_seleccionada]
             st.dataframe(df_detalle_cat, use_container_width=True)
 
-            # Botón de descarga del reporte por rubros
             csv_anual = resumen_rubros_sat.to_csv(index=False).encode('utf-8')
             st.download_button(
-                label="📥 Descargar Reporte Anual por Rubros SAT (CSV)",
+                label="📥 Descargar Reporte Anual de Deducciones (CSV)",
                 data=csv_anual,
-                file_name="deducciones_anuales_rubros_sat.csv",
-                mime="text/csv",
+                file_name="deducciones_autorizadas_anuales.csv",
+                mime="text/css" if False else "text/csv",
             )
         else:
-            st.info("No se encontraron registros de gastos válidos para este ejercicio.")
+            st.info("No se encontraron registros de gastos válidos o pagados para este ejercicio.")
 
     else:
-        st.warning("⚠️ Por favor carga primero tus archivos de facturas en el **Módulo Mensual** para procesar la declaración anual.")
+        st.warning("⚠️ Por favor carga primero tus archivos en el **Módulo Mensual**.")
 
 st.markdown("---")
 st.caption("💻 **Sistema de Declaraciones + Onefacture** | Diseñado y desarrollado por **Alam E.T.N.**")
