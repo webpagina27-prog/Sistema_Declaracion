@@ -993,11 +993,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             "No hay gastos gravados con IVA al 16% registrados en este período"
             " para generar la DIOT."
         )
-else:
-    st.info(
-        "Carga las Facturas EMITIDAS y RECIBIDAS (archivos obligatorios) para"
-        " comenzar el análisis."
-    )
 
 # ==========================================
     # 10. REPORTE INDEPENDIENTE: TASA 0% Y EXENTOS
@@ -1069,7 +1064,11 @@ else:
     else:
         st.info("No hay gastos registrados con Tasa 0% o Exentos en este período.")
 
-
+else:
+    st.info(
+        "Carga las Facturas EMITIDAS y RECIBIDAS (archivos obligatorios) para"
+        " comenzar el análisis."
+    )
 
 st.markdown("---")
 st.caption(
