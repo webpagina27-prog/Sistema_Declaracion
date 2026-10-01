@@ -518,28 +518,133 @@ with tab_mensual:
 
 with tab_anual:
     st.header("📅 Módulo de Declaración Anual - Personas Físicas")
-    st.write("Clasificación automática de deducciones autorizadas para el portal del SAT.")
+    st.caption("Clasificación automática y agrupación de deducciones autorizadas según los rubros oficiales del portal del SAT.")
 
     # Verificamos si existen datos cargados previamente en el sistema mensual
-    if "df_rec_f_raw" in st.session_state:
-        st.success("¡Datos del ejercicio cargados correctamente desde el módulo mensual para la anual!")
-        
-        categorias_sat = [
-            "Adquisiciones netas de mercancías (compras) nacionales",
-            "Gastos generales",
-            "Combustibles y lubricantes",
-            "Honorarios",
-            "Uso o goce temporal de bienes",
-            "Seguros y fianzas",
-            "Consumo en restaurantes",
-            "Otros gastos"
-        ]
+    if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
+        st.success("✅ ¡Datos del ejercicio cargados correctamente desde el módulo mensual!")
 
-        st.subheader("🔍 Preclasificación y Validación de Deducciones Anuales")
-        st.selectbox("Selecciona categoría SAT para depuración:", categorias_sat)
-        st.info("Aquí puedes integrar la lógica completa de tu ejercicio anual aprovechando los DataFrames cargados en la sesión.")
+        df_anual_emi = st.session_state["df_emi_f_raw"].copy()
+        df_anual_rec = st.session_state["df_rec_f_raw"].copy()
+
+        # Filtrar solo comprobantes VIGENTES
+        if "Estado" in df_anual_emi.columns:
+            df_anual_emi = df_anual_emi[df_anual_emi["Estado"] == "VIGENTE"]
+        if "Estado" in df_anual_rec.columns:
+            df_anual_rec = df_anual_rec[df_anual_rec["Estado"] == "VIGENTE"]
+
+        # ==========================================
+        # 1. CÁLCULOS ANUALES DE INGRESOS
+        # ==========================================
+        emi_pue_anual = df_anual_emi[
+            (df_anual_emi["Metodo pago"].astype(str).str.startswith("PUE"))
+            & (df_anual_emi["Tipo"].astype(str).str.startswith("I"))
+        ]
+        sub_anual_ingresos = float(emi_pue_anual["SubTotal"].sum())
+        iva_anual_ingresos = float(emi_pue_anual["IVA Trasladado 16%"].sum()) if "IVA Trasladado 16%" in emi_pue_anual.columns else 0.0
+
+        if "df_emi_p_raw" in st.session_state and not st.session_state["df_emi_p_raw"].empty:
+            df_anual_emi_p = st.session_state["df_emi_p_raw"].copy()
+            if "Estado" in df_anual_emi_p.columns:
+                df_anual_emi_p = df_anual_emi_p[df_anual_emi_p["Estado"] == "VIGENTE"]
+            iva_rep_anual = float(df_anual_emi_p["TrasladosImpuestoIVA16 - pago"].dropna().sum()) if "TrasladosImpuestoIVA16 - pago" in df_anual_emi_p.columns else 0.0
+            sub_rep_anual = iva_rep_anual / 0.16 if iva_rep_anual > 0 else 0.0
+            sub_anual_ingresos += sub_rep_anual
+            iva_anual_ingresos += iva_rep_anual
+
+        # ==========================================
+        # 2. CLASIFICACIÓN DE GASTOS POR RUBRO SAT
+        # ==========================================
+        rec_pue_anual = df_anual_rec[
+            (df_anual_rec["Metodo pago"].astype(str).str.startswith("PUE"))
+            & (df_anual_rec["Tipo"].astype(str).str.startswith("I"))
+        ].copy()
+
+        def clasificar_gasto_sat(row):
+            texto_completo = ""
+            for col in ["ClaveProdServ", "Conceptos", "Descripcion", "Concepto"]:
+                if col in row and pd.notna(row[col]):
+                    texto_completo += str(row[col]) + " "
+            texto_completo = texto_completo.upper()
+
+            if "1510" in texto_completo or "COMBUSTIBLE" in texto_completo or "GASOLINA" in texto_completo or "DIESEL" in texto_completo:
+                return "Combustibles y lubricantes"
+            elif "HONORARIOS" in texto_completo or "SERVICIOS PROFESIONALES" in texto_completo:
+                return "Honorarios"
+            elif "ARRENDAMIENTO" in texto_completo or "RENTA" in texto_completo:
+                return "Uso o goce temporal de bienes (Rentas)"
+            elif "RESTAURANT" in texto_completo or "ALIMENTOS" in texto_completo or "CONSUMO" in texto_completo:
+                return "Consumo en restaurantes"
+            else:
+                return "Gastos generales"
+
+        rec_pue_anual["Rubro_SAT"] = rec_pue_anual.apply(clasificar_gasto_sat, axis=1)
+
+        col_iva_rec_anual = next((c for c in rec_pue_anual.columns if "iva trasladado 16%" in c.lower() or "iva 16%" in c.lower()), None)
+        if col_iva_rec_anual:
+            rec_pue_anual["_iva_monto"] = pd.to_numeric(rec_pue_anual[col_iva_rec_anual], errors="coerce").fillna(0)
+        else:
+            rec_pue_anual["_iva_monto"] = 0.0
+
+        sub_anual_gastos = float(rec_pue_anual["SubTotal"].sum())
+
+        # ==========================================
+        # 3. MÉTRICAS Y RESULTADOS ANUALES
+        # ==========================================
+        st.divider()
+        st.subheader("📊 Balance Consolidado del Ejercicio Anual")
+
+        ac1, ac2, ac3 = st.columns(3)
+        ac1.metric("Ingresos Acumulables Anuales", f"${sub_anual_ingresos:,.2f}")
+        ac2.metric("Deducciones Autorizadas Anuales", f"${sub_anual_gastos:,.2f}")
+        utilidad_anual = sub_anual_ingresos - sub_anual_gastos
+        ac3.metric(
+            "Utilidad Fiscal Anual", 
+            f"${utilidad_anual:,.2f}", 
+            delta=("Utilidad Gravable" if utilidad_anual >= 0 else "Pérdida Fiscal"),
+            delta_color="normal" if utilidad_anual >= 0 else "inverse"
+        )
+
+        # ==========================================
+        # 4. TABLA RESUMEN POR RUBRO SAT
+        # ==========================================
+        st.divider()
+        st.subheader("📑 Deducciones Autorizadas Agrupadas por Rubro del SAT")
+        st.caption("Montos listados para el llenado de la declaración anual conforme a los conceptos oficiales:")
+
+        if not rec_pue_anual.empty:
+            resumen_rubros_sat = rec_pue_anual.groupby("Rubro_SAT").agg(
+                No_Facturas=("SubTotal", "count"),
+                Subtotal_Deducible=("SubTotal", "sum"),
+                IVA_Asociado=("_iva_monto", "sum"),
+                Total_Global=("Total", "sum") if "Total" in rec_pue_anual.columns else ("SubTotal", "sum")
+            ).reset_index()
+
+            resumen_rubros_sat = resumen_rubros_sat.sort_values(by="Subtotal_Deducible", ascending=False)
+            st.table(resumen_rubros_sat)
+
+            # ==========================================
+            # 5. DETALLE E INTERACCIÓN POR RUBRO
+            # ==========================================
+            st.subheader("🔍 Depuración de Facturas por Rubro SAT")
+            cat_seleccionada = st.selectbox("Selecciona la categoría para revisar sus facturas individuales:", resumen_rubros_sat["Rubro_SAT"].tolist())
+
+            df_detalle_cat = rec_pue_anual[rec_pue_anual["Rubro_SAT"] == cat_seleccionada]
+            st.dataframe(df_detalle_cat, use_container_width=True)
+
+            # Botón de descarga del reporte por rubros
+            csv_anual = resumen_rubros_sat.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Descargar Reporte Anual por Rubros SAT (CSV)",
+                data=csv_anual,
+                file_name="deducciones_anuales_rubros_sat.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("No se encontraron registros de gastos válidos para este ejercicio.")
+
     else:
-        st.warning("⚠️ Por favor carga primero tus archivos de facturas en el módulo mensual para procesar la declaración anual.")
+        st.warning("⚠️ Por favor carga primero tus archivos de facturas en el **Módulo Mensual** para procesar la declaración anual.")
 
 st.markdown("---")
 st.caption("💻 **Sistema de Declaraciones + Onefacture** | Diseñado y desarrollado por **Alam E.T.N.**")
