@@ -1017,12 +1017,13 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     if lista_ceros_exentos:
         df_0_ex_consolidado = pd.concat(lista_ceros_exentos, ignore_index=True)
 
+        # Agrupación con nombre para evitar MultiIndex en Pandas
         tabla_0_ex = df_0_ex_consolidado.groupby(
             [col_rfc_emisor, col_nom_emisor, "Tipo Tasa"], as_index=False
-        ).agg({
-            "Total": ["count", "sum"],
-            "SubTotal": "sum"
-        })
+        ).agg(
+            Num_Facturas=("Total", "count"),
+            Subtotal_Monto=("SubTotal", "sum")
+        )
 
         tabla_0_ex.columns = [
             "RFC Proveedor",
@@ -1031,14 +1032,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             "Número de Facturas",
             "Subtotal / Monto Total",
         ]
-
-        tabla_0_ex = tabla_0_ex[[
-            "RFC Proveedor",
-            "Nombre / Razón Social",
-            "Tipo de Tasa",
-            "Número de Facturas",
-            "Subtotal / Monto Total",
-        ]]
 
         tabla_0_ex_display = tabla_0_ex.copy()
         tabla_0_ex_display["Subtotal / Monto Total"] = tabla_0_ex_display["Subtotal / Monto Total"].apply(lambda x: f"${x:,.2f}")
