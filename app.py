@@ -2,9 +2,19 @@ import io
 import pandas as pd
 import streamlit as st
 
+
+    # ==========================================
+    # CREACIÓN DE PESTAÑAS PRINCIPALES DE LA APP
+    # ==========================================
+tab_mensual, tab_anual = st.tabs(["📊 Módulo Mensual / Bimestral", "📅 Módulo Declaración Anual"])
+
+with tab_mensual:
+        # AQUÍ VA TODO EL CÓDIGO ACTUAL QUE YA TIENES (PUE, PPD, REPs, DIOT, Tasa 0 y Exentos)
+        st.info("Aquí opera el flujo normal de tus reportes mensuales y bimestrales.")
+
 st.set_page_config(
-    page_title="Conciliación Fiscal SAT y Diagnóstico Financiero",
-    layout="wide",
+page_title="Conciliación Fiscal SAT y Diagnóstico Financiero",
+layout="wide",
 )
 
 st.title("📊 Conciliación Fiscal SAT y Diagnóstico Financiero")
@@ -1060,6 +1070,64 @@ else:
         "Carga las Facturas EMITIDAS y RECIBIDAS (archivos obligatorios) para"
         " comenzar el análisis."
     )
+
+    with tab_anual:
+        st.header("📅 Módulo de Declaración Anual - Personas Físicas")
+        st.write("Clasificación automática de deducciones autorizadas para el portal del SAT.")
+
+        # Verificamos si existen datos cargados previamente en el sistema
+        if 'df_gastos_global' in locals() or 'df_gastos_global' in globals() or ('rec_pue_0_directo' in locals()):
+            
+            # (Ejemplo de integración de tus fuentes de gastos consolidadas del año)
+            st.success("¡Datos del ejercicio cargados correctamente para la anual!")
+            
+            # Catálogo oficial del SAT extraído de tus requerimientos
+            categorias_sat = [
+                "Adquisiciones netas de mercancías (compras) nacionales",
+                "Adquisiciones netas de mercancías (compras) extranjeras",
+                "Gastos generales",
+                "Combustibles y lubricantes",
+                "Gasolina y mantenimiento de transporte",
+                "Fletes y acarreo",
+                "Maniobras, empaques y fletes en el campo",
+                "Sueldos, salarios y conceptos asimilados",
+                "Honorarios",
+                "Uso o goce temporal de bienes",
+                "Seguros y fianzas",
+                "Consumo en restaurantes",
+                "Regalías y asistencia técnica",
+                "Viáticos y gastos de viaje",
+                "Intereses pagados y moratorios",
+                "Otros gastos"
+            ]
+
+            # Función de clasificación automática por palabras clave
+            def clasificar_gasto_sat(descripcion):
+                desc = str(descripcion).lower()
+                if any(k in desc for k in ["gasolina", "diesel", "combustible", "lubricante", "petroleo"]):
+                    return "Combustibles y lubricantes"
+                elif any(k in desc for k in ["flete", "acarreos", "envio", "paqueteria", "transportacion"]):
+                    return "Fletes y acarreo"
+                elif any(k in desc for k in ["honorario", "servicios profesionales", "asesoria"]):
+                    return "Honorarios"
+                elif any(k in desc for k in ["renta", "arrendamiento", "uso o goce"]):
+                    return "Uso o goce temporal de bienes"
+                elif any(k in desc for k in ["seguro", "fianza", "poliza"]):
+                    return "Seguros y fianzas"
+                elif any(k in desc for k in ["restaurante", "alimentos", "consumo de alimentos", "comida"]):
+                    return "Consumo en restaurantes"
+                else:
+                    return "Gastos generales" # Categoría por defecto para revisión
+
+            st.subheader("🔍 Preclasificación y Validación de Deducciones")
+            st.write("Modifica en la tabla inferior cualquier concepto que requiera ajuste manual para la declaración anual.")
+
+            # Simulación de tabla interactiva de revisión (aquí conectaremos tu DataFrame real de gastos anuales)
+            # Nota: Integraremos el selectbox interactivo de Streamlit para control total.
+            
+        else:
+            st.warning("⚠️ Por favor carga primero tus archivos de facturas en el módulo mensual o carga la información del ejercicio para procesar la declaración anual.")
+
 
 st.markdown("---")
 st.caption(
