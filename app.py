@@ -779,7 +779,7 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     )
 
     # ==========================================
-    # 9. REPORTE DIOT
+    # 9. REPORTE DIOT (16%)
     # ==========================================
     st.divider()
     st.subheader("📋 Reporte Concentrado para la DIOT (Agrupado por RFC)")
@@ -994,15 +994,14 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             " para generar la DIOT."
         )
 
-# ==========================================
+    # ==========================================
     # 10. REPORTE INDEPENDIENTE: TASA 0% Y EXENTOS
     # ==========================================
     st.divider()
     st.subheader("📋 Reporte de Gastos Tasa 0% y Exentos (Agrupado por RFC)")
 
-    # Unimos las facturas de tasa 0% y exentas que ya detectamos previamente
     lista_ceros_exentos = []
-    
+
     if not rec_pue_0_directo.empty:
         df_0 = rec_pue_0_directo[[col_rfc_emisor, col_nom_emisor, "_sub_neto", "Total"]].copy()
         df_0["Tipo Tasa"] = "Tasa 0%"
@@ -1017,8 +1016,7 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
 
     if lista_ceros_exentos:
         df_0_ex_consolidado = pd.concat(lista_ceros_exentos, ignore_index=True)
-        
-        # Agrupamos por RFC y Tipo de Tasa para mantener el desglose limpio
+
         tabla_0_ex = df_0_ex_consolidado.groupby(
             [col_rfc_emisor, col_nom_emisor, "Tipo Tasa"], as_index=False
         ).agg({
@@ -1033,7 +1031,7 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             "Número de Facturas",
             "Subtotal / Monto Total",
         ]
-        
+
         tabla_0_ex = tabla_0_ex[[
             "RFC Proveedor",
             "Nombre / Razón Social",
@@ -1054,7 +1052,7 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             return output.getvalue()
 
         excel_0_ex_data = convertir_0_ex_a_excel(tabla_0_ex)
-        
+
         st.download_button(
             label="📥 Descargar Reporte Tasa 0% y Exentos en Excel",
             data=excel_0_ex_data,
