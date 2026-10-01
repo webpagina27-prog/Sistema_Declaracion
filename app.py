@@ -2,10 +2,6 @@ import io
 import pandas as pd
 import streamlit as st
 
-# ==========================================
-# INICIO DEL SISTEMA
-# ==========================================
-
 st.set_page_config(
     page_title="Conciliación Fiscal SAT y Diagnóstico Financiero",
     layout="wide",
@@ -302,9 +298,9 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     cant_emi_pue = len(emi_pue)
 
     if not df_emi_p.empty:
-        sub_emi_rep = (
-            float(df_emi_p["TrasladosBaseIVA16 - pago"].dropna().sum())
-            if "TrasladosBaseIVA16 - pago" in df_emi_p.columns
+        total_emi_rep = (
+            float(df_emi_p["Monto"].dropna().sum())
+            if "Monto" in df_emi_p.columns
             else 0.0
         )
         iva_emi_rep = (
@@ -312,9 +308,15 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             if "TrasladosImpuestoIVA16 - pago" in df_emi_p.columns
             else 0.0
         )
+        sub_emi_rep = iva_emi_rep / 0.16 if iva_emi_rep > 0 else 0.0
         cant_emi_rep = len(df_emi_p)
     else:
-        sub_emi_rep, iva_emi_rep, cant_emi_rep = 0.0, 0.0, 0
+        total_emi_rep, sub_emi_rep, iva_emi_rep, cant_emi_rep = (
+            0.0,
+            0.0,
+            0.0,
+            0,
+        )
 
     emi_egresos = df_emi_f[df_emi_f["Tipo"].astype(str).str.startswith("E")]
     sub_emi_egreso = float(emi_egresos["SubTotal"].sum())
@@ -393,10 +395,8 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     else:
         rec_pue_all["_sub_neto"] = rec_pue_all["SubTotal"]
 
-    # Filtrar facturas con IVA 16%
     rec_pue_16 = rec_pue_all[rec_pue_all["_iva_monto"] > 0].copy()
 
-    # Identificación Exentos y Tasa 0%
     col_exento = next(
         (c for c in rec_pue_all.columns if "exento" in c.lower()), None
     )
@@ -433,12 +433,10 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     else:
         rec_pue_0_directo = pd.DataFrame()
 
-    # Totales Tasa 16% (base exacta calculada desde el IVA para extraer sobrantes de Tasa 0% si existen)
     iva_rec_pue_16 = float(rec_pue_16["_iva_monto"].sum())
     sub_rec_pue_16_bruto = float(rec_pue_16["_sub_neto"].sum())
     sub_rec_pue_16 = iva_rec_pue_16 / 0.16 if iva_rec_pue_16 > 0 else 0.0
 
-    # Diferencia que pertenece a Tasa 0% dentro de facturas gravadas parcialmente
     sub_rec_pue_0_mixto = max(0.0, sub_rec_pue_16_bruto - sub_rec_pue_16)
 
     desc_rec_pue_16 = (
@@ -446,7 +444,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     )
     cant_rec_pue_16 = len(rec_pue_16)
 
-    # Totales Tasa 0%
     sub_rec_pue_0_directo = (
         float(rec_pue_0_directo["_sub_neto"].sum())
         if not rec_pue_0_directo.empty
@@ -455,7 +452,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     sub_rec_pue_0 = sub_rec_pue_0_directo + sub_rec_pue_0_mixto
     cant_rec_pue_0 = len(rec_pue_0_directo)
 
-    # Totales Exentos
     sub_rec_pue_exento = (
         float(rec_pue_exento["_sub_neto"].sum())
         if not rec_pue_exento.empty
@@ -463,7 +459,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     )
     cant_rec_pue_exento = len(rec_pue_exento)
 
-    # Combustibles
     rec_pue_comb = df_rec_f[
         mask_combustibles
         & (df_rec_f["Metodo pago"].astype(str).str.startswith("PUE"))
@@ -489,11 +484,11 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     iva_comb_real = sub_comb * 0.16
     cant_rec_comb = cant_rec_comb_xml + cant_rec_comb_man
 
-    # REPs
+    # REPs Recibidos (Gastos) con Monto
     if not df_rec_p.empty:
-        sub_rec_rep = (
-            float(df_rec_p["TrasladosBaseIVA16 - pago"].dropna().sum())
-            if "TrasladosBaseIVA16 - pago" in df_rec_p.columns
+        total_rec_rep = (
+            float(df_rec_p["Monto"].dropna().sum())
+            if "Monto" in df_rec_p.columns
             else 0.0
         )
         iva_rec_rep = (
@@ -501,11 +496,16 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             if "TrasladosImpuestoIVA16 - pago" in df_rec_p.columns
             else 0.0
         )
+        sub_rec_rep = iva_rec_rep / 0.16 if iva_rec_rep > 0 else 0.0
         cant_rec_rep = len(df_rec_p)
     else:
-        sub_rec_rep, iva_rec_rep, cant_rec_rep = 0.0, 0.0, 0
+        total_rec_rep, sub_rec_rep, iva_rec_rep, cant_rec_rep = (
+            0.0,
+            0.0,
+            0.0,
+            0,
+        )
 
-    # Egresos (Notas de Crédito)
     rec_egresos = df_rec_f[
         df_rec_f["Tipo"].astype(str).str.startswith("E")
     ].copy()
@@ -518,13 +518,11 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
     total_rec_egreso = sub_rec_egreso + iva_rec_egreso
     cant_rec_egreso = len(rec_egresos)
 
-    # Consolidación General
     subtotal_gastos_16 = (sub_rec_pue_16 + sub_comb + sub_rec_rep) - sub_rec_egreso
     iva_acreditable = (
         iva_rec_pue_16 + iva_comb_real + iva_rec_rep
     ) - iva_rec_egreso
 
-    # SUBTOTAL CALCULADO DIRECTO DEL IVA PARA QUE CUADRE EXACTO CON LA DIOT
     subtotal_gastos_16_diot = (
         iva_acreditable / 0.16 if iva_acreditable != 0 else 0.0
     )
@@ -636,7 +634,7 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             "Subtotal (Base ISR)": f"${sub_emi_rep:,.2f}",
             "Descuentos": "$0.00",
             "IVA (Exacto XML)": f"${iva_emi_rep:,.2f}",
-            "Total (Neto Banco)": f"${(sub_emi_rep + iva_emi_rep):,.2f}",
+            "Total (Neto Banco)": f"${total_emi_rep:,.2f}",
         },
         {
             "Concepto": "3. (-) Egresos / Notas de Crédito Emitidas (E)",
@@ -700,7 +698,7 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             "Subtotal (Base ISR)": f"${sub_rec_rep:,.2f}",
             "Descuentos": "$0.00",
             "IVA (Exacto XML)": f"${iva_rec_rep:,.2f}",
-            "Total (Neto Banco)": f"${(sub_rec_rep + iva_rec_rep):,.2f}",
+            "Total (Neto Banco)": f"${total_rec_rep:,.2f}",
         },
         {
             "Concepto": "8. (-) Egresos / Notas de Crédito Recibidas (E)",
@@ -727,7 +725,7 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
                 f"${(iva_rec_pue_16 + iva_comb_real + iva_rec_rep):,.2f}"
             ),
             "Total (Neto Banco)": (
-                f"${((sub_rec_pue_16 + iva_rec_pue_16) + sub_rec_pue_0 + sub_rec_pue_exento + total_comb + (sub_rec_rep + iva_rec_rep)):,.2f}"
+                f"${((sub_rec_pue_16 + iva_rec_pue_16) + sub_rec_pue_0 + sub_rec_pue_exento + total_comb + total_rec_rep):,.2f}"
             ),
         },
         {
@@ -761,15 +759,15 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
         .astype(int)
     )
 
-    # Mostrar la tabla en la interfaz
     st.table(tabla_desglose)
 
-    # Generar y mostrar el botón de descarga en Excel del Desglose General
+
     def convertir_desglose_a_excel(df):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, sheet_name="Desglose Operaciones", index=False)
         return output.getvalue()
+
 
     excel_desglose = convertir_desglose_a_excel(tabla_desglose)
 
@@ -804,7 +802,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
         "NombreEmisor",
     )
 
-    # 1. Facturas PUE Tipo I gravadas al 16% (Subtotal sacado del IVA)
     if not rec_pue_16.empty:
         diot_gral = rec_pue_16[[col_rfc_emisor, col_nom_emisor]].copy()
         diot_gral["IVA_16"] = rec_pue_16["_iva_monto"]
@@ -821,7 +818,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             ]
         )
 
-    # 2. Combustibles (Subtotal sacado del IVA)
     if not rec_pue_comb.empty:
         diot_comb = rec_pue_comb[
             [col_rfc_emisor, col_nom_emisor, "Total"]
@@ -840,7 +836,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             ]
         )
 
-    # 3. Gastos Manuales (Subtotal sacado del IVA)
     if gastos_manuales_filtrados:
         diot_man = pd.DataFrame(gastos_manuales_filtrados)
         diot_man = diot_man.rename(
@@ -863,7 +858,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             ]
         )
 
-    # 4. Complementos de Pago (REPs)
     if not df_rec_p.empty:
         col_rfc_p = next(
             (
@@ -895,7 +889,11 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             )
             diot_p = diot_p[diot_p["IVA_16"] > 0].copy()
             diot_p["SubTotal"] = diot_p["IVA_16"] / 0.16
-            diot_p["Total"] = diot_p["SubTotal"] + diot_p["IVA_16"]
+            diot_p["Total"] = (
+                df_rec_p["Monto"]
+                if "Monto" in df_rec_p.columns
+                else (diot_p["SubTotal"] + diot_p["IVA_16"])
+            )
     else:
         diot_p = pd.DataFrame(
             columns=[
@@ -907,7 +905,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             ]
         )
 
-    # 5. (-) Egresos / Notas de Crédito (Gravados 16%)
     if not rec_egresos.empty:
         diot_egr = rec_egresos[[col_rfc_emisor, col_nom_emisor]].copy()
         diot_egr["IVA_16"] = (
@@ -933,7 +930,6 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
             ]
         )
 
-    # Consolidado DIOT
     df_diot_consolidado = pd.concat(
         [diot_gral, diot_comb, diot_man, diot_p, diot_egr], ignore_index=True
     )
@@ -977,11 +973,13 @@ if "df_emi_f_raw" in st.session_state and "df_rec_f_raw" in st.session_state:
 
         st.dataframe(tabla_diot_display, width="stretch")
 
+
         def convertir_a_excel(df):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 df.to_excel(writer, index=False, sheet_name="DIOT")
             return output.getvalue()
+
 
         excel_data = convertir_a_excel(tabla_diot)
         st.download_button(
@@ -1001,8 +999,80 @@ else:
         " comenzar el análisis."
     )
 
+# ==========================================
+    # 10. REPORTE INDEPENDIENTE: TASA 0% Y EXENTOS
+    # ==========================================
+    st.divider()
+    st.subheader("📋 Reporte de Gastos Tasa 0% y Exentos (Agrupado por RFC)")
+
+    # Unimos las facturas de tasa 0% y exentas que ya detectamos previamente
+    lista_ceros_exentos = []
+    
+    if not rec_pue_0_directo.empty:
+        df_0 = rec_pue_0_directo[[col_rfc_emisor, col_nom_emisor, "_sub_neto", "Total"]].copy()
+        df_0["Tipo Tasa"] = "Tasa 0%"
+        df_0["SubTotal"] = df_0["_sub_neto"]
+        lista_ceros_exentos.append(df_0[[col_rfc_emisor, col_nom_emisor, "Tipo Tasa", "SubTotal", "Total"]])
+
+    if not rec_pue_exento.empty:
+        df_ex = rec_pue_exento[[col_rfc_emisor, col_nom_emisor, "_sub_neto", "Total"]].copy()
+        df_ex["Tipo Tasa"] = "Exento"
+        df_ex["SubTotal"] = df_ex["_sub_neto"]
+        lista_ceros_exentos.append(df_ex[[col_rfc_emisor, col_nom_emisor, "Tipo Tasa", "SubTotal", "Total"]])
+
+    if lista_ceros_exentos:
+        df_0_ex_consolidado = pd.concat(lista_ceros_exentos, ignore_index=True)
+        
+        # Agrupamos por RFC y Tipo de Tasa para mantener el desglose limpio
+        tabla_0_ex = df_0_ex_consolidado.groupby(
+            [col_rfc_emisor, col_nom_emisor, "Tipo Tasa"], as_index=False
+        ).agg({
+            "Total": ["count", "sum"],
+            "SubTotal": "sum"
+        })
+
+        tabla_0_ex.columns = [
+            "RFC Proveedor",
+            "Nombre / Razón Social",
+            "Tipo de Tasa",
+            "Número de Facturas",
+            "Subtotal / Monto Total",
+        ]
+        
+        tabla_0_ex = tabla_0_ex[[
+            "RFC Proveedor",
+            "Nombre / Razón Social",
+            "Tipo de Tasa",
+            "Número de Facturas",
+            "Subtotal / Monto Total",
+        ]]
+
+        tabla_0_ex_display = tabla_0_ex.copy()
+        tabla_0_ex_display["Subtotal / Monto Total"] = tabla_0_ex_display["Subtotal / Monto Total"].apply(lambda x: f"${x:,.2f}")
+
+        st.dataframe(tabla_0_ex_display, width="stretch")
+
+        def convertir_0_ex_a_excel(df):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df.to_excel(writer, index=False, sheet_name="Tasa 0 y Exentos")
+            return output.getvalue()
+
+        excel_0_ex_data = convertir_0_ex_a_excel(tabla_0_ex)
+        
+        st.download_button(
+            label="📥 Descargar Reporte Tasa 0% y Exentos en Excel",
+            data=excel_0_ex_data,
+            file_name="reporte_tasa_cero_exentos.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    else:
+        st.info("No hay gastos registrados con Tasa 0% o Exentos en este período.")
 
 
 
 st.markdown("---")
-st.caption("💻 **Sistema de Declaraciones +  Onefacture ** | Diseñado y desarrollado por **Alam E.T.N.**")
+st.caption(
+    "💻 **Sistema de Declaraciones + Onefacture** | Diseñado y desarrollado por"
+    " **Alam E.T.N.**"
+)
