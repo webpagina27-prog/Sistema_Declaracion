@@ -550,7 +550,7 @@ with tab_mensual:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-        # ==========================================
+# ==========================================
         # 9. SECCIÓN DE DIOT Y DESGLOSE POR TASAS CON BOTONES INDEPENDIENTES
         # ==========================================
         st.divider()
@@ -558,11 +558,18 @@ with tab_mensual:
 
         col_diot_1, col_diot_2, col_diot_3 = st.columns(3)
 
+        # Función auxiliar para mostrar columnas seguras
+        def mostrar_tabla_segura(df_sub):
+            cols_disponibles = df_sub.columns.tolist()
+            cols_deseadas = ["UUID", "Nombre", "Emisor", "Receptor/Emisor", "RFC", "SubTotal", "_iva_calc", "Total"]
+            cols_a_mostrar = [c for c in cols_deseadas if c in cols_disponibles]
+            st.dataframe(df_sub[cols_a_mostrar], use_container_width=True)
+
         with col_diot_1:
             st.markdown("#### 🔵 Tasa 16% (IVA Acreditable)")
             st.metric("Total Gastos Tasa 16%", f"${sub_rec_pue_16:,.2f}", f"{cant_rec_pue_16} facturas")
             if not gen_16.empty:
-                st.dataframe(gen_16[["UUID", "Receptor/Emisor", "RFC", "SubTotal", "_iva_calc", "Total"]], use_container_width=True)
+                mostrar_tabla_segura(gen_16)
                 st.download_button(
                     label="📥 Descargar DIOT Tasa 16% (Excel)",
                     data=convertir_a_excel(gen_16),
@@ -577,7 +584,7 @@ with tab_mensual:
             st.markdown("#### 🟢 Tasa 0%")
             st.metric("Total Gastos Tasa 0%", f"${sub_rec_pue_0:,.2f}", f"{cant_rec_pue_0} facturas")
             if not gen_0.empty:
-                st.dataframe(gen_0[["UUID", "Receptor/Emisor", "RFC", "SubTotal", "Total"]], use_container_width=True)
+                mostrar_tabla_segura(gen_0)
                 st.download_button(
                     label="📥 Descargar DIOT Tasa 0% (Excel)",
                     data=convertir_a_excel(gen_0),
@@ -592,7 +599,7 @@ with tab_mensual:
             st.markdown("#### 🟠 Exentos")
             st.metric("Total Gastos Exentos", f"${sub_rec_pue_exento:,.2f}", f"{cant_rec_pue_exento} facturas")
             if not gen_ex.empty:
-                st.dataframe(gen_ex[["UUID", "Receptor/Emisor", "RFC", "SubTotal", "Total"]], use_container_width=True)
+                mostrar_tabla_segura(gen_ex)
                 st.download_button(
                     label="📥 Descargar DIOT Exentos (Excel)",
                     data=convertir_a_excel(gen_ex),
