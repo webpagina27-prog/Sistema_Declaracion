@@ -91,7 +91,7 @@ with tab_mensual:
     # 2. PANEL LATERAL: CONFIGURACIÓN BÁSICA Y CONTROLES
     # ==========================================
     with st.sidebar:
-        st.header("⚙ Selección del Período")
+        st.header("⚙️️ Selección del Período")
 
         regimen = st.selectbox(
             "Régimen Fiscal",
@@ -229,7 +229,7 @@ with tab_mensual:
         total_cant_ingresos = cant_emi_pue + cant_emi_rep + cant_emi_egreso + cant_ing_man
 
         # ==========================================
-        # 5. GASTOS: SEPARACIÓN DE TASAS (16%, 0%, EXENTO) Y COMBUSTIBLES (PUE + PPD PAGADOS)
+        # 5. GASTOS: SEPARACIÓN DE TASAS (16%, 0%, EXENTO)
         # ==========================================
         mask_clave_comb = pd.Series(False, index=df_rec_f.index)
         for col in ["ClaveProdServ", "Conceptos", "Descripcion", "Concepto"]:
@@ -239,46 +239,6 @@ with tab_mensual:
         col_ieps = [c for c in df_rec_f.columns if "ieps" in c.lower()]
         mask_ieps = (pd.to_numeric(df_rec_f[col_ieps[0]], errors="coerce").fillna(0) > 0) if col_ieps else pd.Series(False, index=df_rec_f.index)
         mask_combustibles = mask_clave_comb | mask_ieps
-
-        # Facturas de combustible PUE
-        rec_pue_comb = df_rec_f[
-            mask_combustibles
-            & (df_rec_f["Metodo pago"].astype(str).str.startswith("PUE"))
-            & (df_rec_f["Tipo"].astype(str).str.startswith("I"))
-        ].copy()
-
-        # Facturas de combustible PPD (cruzadas con REPs recibidos en este período)
-        rec_ppd_comb = df_rec_f[
-            mask_combustibles
-            & (df_rec_f["Metodo pago"].astype(str).str.startswith("PPD"))
-            & (df_rec_f["Tipo"].astype(str).str.startswith("I"))
-        ].copy()
-
-        total_comb_ppd_rep = 0.0
-        cant_comb_ppd_rep = 0
-        if not rec_ppd_comb.empty and not df_rec_p.empty:
-            col_id_rel = next((c for c in df_rec_p.columns if "idpago" in c.lower() or "docto" in c.lower() or "uuid" in c.lower() and "relacionado" in c.lower()), None)
-            col_imp_pagado = next((c for c in df_rec_p.columns if "impago" in c.lower() or "importepagado" in c.lower() or "monto" in c.lower()), None)
-            col_uuid_factura = "UUID" if "UUID" in rec_ppd_comb.columns else None
-
-            if col_id_rel and col_imp_pagado and col_uuid_factura:
-                pagos_por_factura = df_rec_p.groupby(col_id_rel)[col_imp_pagado].sum().reset_index()
-                comb_ppd_pagadas = pd.merge(
-                    rec_ppd_comb,
-                    pagos_por_factura,
-                    left_on=col_uuid_factura,
-                    right_on=col_id_rel,
-                    how="inner"
-                )
-                if not comb_ppd_pagadas.empty and "Total" in comb_ppd_pagadas.columns:
-                    comb_ppd_pagadas["Factor_Pagado"] = pd.to_numeric(comb_ppd_pagadas[col_imp_pagado], errors="coerce") / pd.to_numeric(comb_ppd_pagadas["Total"], errors="coerce").replace(0, 1)
-                    comb_ppd_pagadas["Factor_Pagado"] = comb_ppd_pagadas["Factor_Pagado"].clip(upper=1.0)
-                    comb_ppd_pagadas["Total_Efectivo"] = pd.to_numeric(comb_ppd_pagadas["Total"], errors="coerce") * comb_ppd_pagadas["Factor_Pagado"]
-                    total_comb_ppd_rep = float(comb_ppd_pagadas["Total_Efectivo"].sum())
-                    cant_comb_ppd_rep = len(comb_ppd_pagadas)
-
-        cant_rec_comb_xml = len(rec_pue_comb) + cant_comb_ppd_rep
-        total_comb_xml = (float(rec_pue_comb["Total"].sum()) if not rec_pue_comb.empty and "Total" in rec_pue_comb.columns else 0.0) + total_comb_ppd_rep
 
         rec_pue_all = df_rec_f[
             (~mask_combustibles)
@@ -330,6 +290,14 @@ with tab_mensual:
         sub_rec_pue_exento = float(rec_pue_exento["_sub_neto"].sum()) if not rec_pue_exento.empty else 0.0
         cant_rec_pue_exento = len(rec_pue_exento)
 
+        rec_pue_comb = df_rec_f[
+            mask_combustibles
+            & (df_rec_f["Metodo pago"].astype(str).str.startswith("PUE"))
+            & (df_rec_f["Tipo"].astype(str).str.startswith("I"))
+        ].copy()
+        cant_rec_comb_xml = len(rec_pue_comb)
+        total_comb_xml = float(rec_pue_comb["Total"].sum()) if not rec_pue_comb.empty and "Total" in rec_pue_comb.columns else 0.0
+
         gastos_manuales_filtrados = [
             g for g in st.session_state.gastos_manuales
             if periodo_sel == "Todos los meses" or g["Periodo"] == periodo_sel
@@ -352,7 +320,7 @@ with tab_mensual:
 
         rec_egresos = df_rec_f[df_rec_f["Tipo"].astype(str).str.startswith("E")].copy()
         sub_rec_egreso = float(rec_egresos["SubTotal"].sum())
-        iva_rec_egreso = float(rec_rec_egresos["IVA Trasladado 16%"].sum()) if "IVA Trasladado 16%" in rec_rec_egresos.columns else 0.0
+        iva_rec_egreso = float(rec_egresos["IVA Trasladado 16%"].sum()) if "IVA Trasladado 16%" in rec_egresos.columns else 0.0
         total_rec_egreso = sub_rec_egreso + iva_rec_egreso
         cant_rec_egreso = len(rec_egresos)
 
@@ -415,7 +383,7 @@ with tab_mensual:
             disponible_gastar_sub = disponible_gastar_total / 1.16
             iva_gastos_potencial = disponible_gastar_sub * 0.16
 
-            st.warning("⚠ **DIAGNÓSTICO AUTOMÁTICO: TE FALTAN GASTOS / DEDUCCIONES**")
+            st.warning("⚠️️ **DIAGNÓSTICO AUTOMÁTICO: TE FALTAN GASTOS / DEDUCCIONES**")
             st.markdown(f"""
             Tus ingresos cobrados superan a tus gastos pagados. Tienes una utilidad temporal en banco de **${disponible_gastar_total:,.2f} MXN**.
             * • **TOTAL NETO MÁXIMO A DESEMBOLSAR EN BANCO:** **${disponible_gastar_total:,.2f} MXN**
@@ -497,7 +465,7 @@ with tab_mensual:
                 "Total (Neto Banco)": f"${sub_rec_pue_exento:,.2f}",
             },
             {
-                "Concepto": "6. Combustibles (XML PUE/PPD pagados + Manuales)",
+                "Concepto": "6. Combustibles (XML + Manuales - 16% s/Total)",
                 "No. Facturas": cant_rec_comb,
                 "Subtotal (Base ISR)": f"${sub_comb:,.2f}",
                 "Descuentos": "$0.00",
