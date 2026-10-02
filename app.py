@@ -550,7 +550,7 @@ with tab_mensual:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-# ==========================================
+        # ==========================================
         # 9. SECCIÓN DE DIOT Y DESGLOSE POR TASAS CON BOTONES INDEPENDIENTES
         # ==========================================
         st.divider()
@@ -558,7 +558,6 @@ with tab_mensual:
 
         col_diot_1, col_diot_2, col_diot_3 = st.columns(3)
 
-        # Función auxiliar para mostrar columnas seguras
         def mostrar_tabla_segura(df_sub):
             cols_disponibles = df_sub.columns.tolist()
             cols_deseadas = ["UUID", "Nombre", "Emisor", "Receptor/Emisor", "RFC", "SubTotal", "_iva_calc", "Total"]
@@ -628,9 +627,7 @@ with tab_anual:
         if "Estado" in df_anual_rec.columns:
             df_anual_rec = df_anual_rec[df_anual_rec["Estado"] == "VIGENTE"]
 
-        # ==========================================
         # 1. CÁLCULOS ANUALES DE INGRESOS
-        # ==========================================
         emi_pue_anual = df_anual_emi[
             (df_anual_emi["Metodo pago"].astype(str).str.startswith("PUE"))
             & (df_anual_emi["Tipo"].astype(str).str.startswith("I"))
@@ -647,9 +644,7 @@ with tab_anual:
             sub_anual_ingresos += sub_rep_anual
             iva_anual_ingresos += iva_rep_anual
 
-        # ==========================================
         # 2. FUNCIÓN DE CLASIFICACIÓN SAT ANUAL
-        # ==========================================
         def clasificar_y_tratar_gasto_anual(row):
             texto_completo = ""
             for col in ["ClaveProdServ", "Conceptos", "Descripcion", "Concepto"]:
@@ -731,9 +726,7 @@ with tab_anual:
         rec_efectivo_anual = pd.concat(lista_gastos_efectivos, ignore_index=True) if lista_gastos_efectivos else pue_gastos
         sub_anual_gastos = float(rec_efectivo_anual["_sub_calculado"].sum())
 
-        # ==========================================
         # 3. MÉTRICAS Y RESULTADOS ANUALES
-        # ==========================================
         st.divider()
         st.subheader("📊 Balance Consolidado del Ejercicio Anual")
 
@@ -748,9 +741,7 @@ with tab_anual:
             delta_color="normal" if utilidad_anual >= 0 else "inverse"
         )
 
-        # ==========================================
         # 4. TABLA RESUMEN POR RUBRO SAT
-        # ==========================================
         st.divider()
         st.subheader("📑 Deducciones Autorizadas Agrupadas por Rubro del SAT")
 
