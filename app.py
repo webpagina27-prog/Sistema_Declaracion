@@ -352,7 +352,7 @@ with tab_mensual:
 
         rec_egresos = df_rec_f[df_rec_f["Tipo"].astype(str).str.startswith("E")].copy()
         sub_rec_egreso = float(rec_egresos["SubTotal"].sum())
-        iva_rec_egreso = float(rec_rec_egresos["IVA Trasladado 16%"].sum()) if "IVA Trasladado 16%" in rec_rec_egresos.columns else 0.0
+        iva_rec_egreso = float(rec_egresos["IVA Trasladado 16%"].sum()) if "IVA Trasladado 16%" in rec_egresos.columns else 0.0
         total_rec_egreso = sub_rec_egreso + iva_rec_egreso
         cant_rec_egreso = len(rec_egresos)
 
