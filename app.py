@@ -262,7 +262,7 @@ with tab_mensual:
                 return "1510" in txt or "COMBUSTIBLE" in txt or "GASOLINA" in txt or "DIESEL" in txt
 
             mask_comb = df_rec_f_i.apply(es_gasto_combustible, axis=1)
-            rec_pue_comb = df_rec_f_i[mask_comb & df_rec_f_i["Metodo pago"].astype(str.lower).str.startswith("pue")].copy()
+            rec_pue_comb = df_rec_f_i[mask_comb & df_rec_f_i["Metodo pago"].fillna("").astype(str).str.lower().str.strip().str.startswith("pue")].copy()
             
             if not rec_pue_comb.empty:
                 sub_comb_pue = float((pd.to_numeric(rec_pue_comb["Total"], errors="coerce").fillna(0) / 1.16).sum())
