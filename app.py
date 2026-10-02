@@ -237,10 +237,8 @@ with tab_mensual:
             col_desc_rec = next((c for c in df_rec_f_i.columns if "descuento" in c.lower()), None)
             desc_rec_pue_16 = float(df_rec_f_i[col_desc_rec].fillna(0).sum()) if col_desc_rec else 0.0
 
-            # Extracción y cálculo seguro para 16%, 0% y Exentos
             col_iva_rec_16 = next((c for c in df_rec_f_i.columns if "iva trasladado 16%" in c.lower() or "iva 16%" in c.lower()), None)
             
-            # Gastos PUE tasa 16%
             rec_pue_16 = df_rec_f_i[
                 (df_rec_f_i["Metodo pago"].astype(str).str.startswith("PUE")) &
                 (df_rec_f_i[col_iva_rec_16].fillna(0) > 0 if col_iva_rec_16 else False)
@@ -254,7 +252,6 @@ with tab_mensual:
                 sub_rec_pue_16, iva_rec_pue_16 = 0.0, 0.0
             cant_rec_pue_16 = len(rec_pue_16)
 
-            # Combustibles (ClaveProdServ 1510 o descripción)
             mask_comb = df_rec_f_i.apply(lambda r: "1510" in str(r.get("ClaveProdServ", "")) or "COMBUSTIBLE" in str(r.get("Conceptos", "")).upper() or "GASOLINA" in str(r.get("Conceptos", "")).upper(), axis=1)
             rec_pue_comb = df_rec_f_i[mask_comb].copy()
             
@@ -266,7 +263,6 @@ with tab_mensual:
                 sub_comb, iva_comb_real, total_comb = 0.0, 0.0, 0.0
             cant_rec_comb_xml = len(rec_pue_comb)
 
-            # Tasa 0% y Exentos
             col_tasa_0 = next((c for c in df_rec_f_i.columns if "0%" in c.lower() or "tasa 0" in c.lower()), None)
             col_exento = next((c for c in df_rec_f_i.columns if "exento" in c.lower()), None)
 
