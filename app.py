@@ -170,7 +170,6 @@ with tab_mensual:
             "Bimestre 4 (Jul-Ago)": [7, 8], "Bimestre 5 (Sep-Oct)": [9, 10], "Bimestre 6 (Nov-Dic)": [11, 12],
         }
 
-        # Filtrar facturas emitidas por fecha de emisión
         if periodo_sel != "Todos los meses":
             num_meses = meses_dict[periodo_sel]
             df_emi_f["Fecha emision"] = pd.to_datetime(df_emi_f["Fecha emision"], errors="coerce")
@@ -230,7 +229,7 @@ with tab_mensual:
         total_cant_ingresos = cant_emi_pue + cant_emi_rep + cant_emi_egreso + cant_ing_man
 
         # ==========================================
-        # 5. GASTOS: FUNCIÓN UNIFICADA DE TRATAMIENTO (PUE + PPD CON REPS)
+        # 5. GASTOS: TRATAMIENTO (PUE + PPD CON REPS)
         # ==========================================
         def clasificar_y_tratar_gasto(row):
             texto_completo = ""
@@ -300,7 +299,7 @@ with tab_mensual:
         else:
             rec_efectivo_mensual = pd.DataFrame()
 
-        # Separar combustibles vs gastos generales para el desglose mensual
+        # Separar combustibles vs gastos generales para el desglose y DIOT
         if not rec_efectivo_mensual.empty:
             mask_comb_m = rec_efectivo_mensual["_rubro"] == "Combustibles y lubricantes"
             comb_mensual_df = rec_efectivo_mensual[mask_comb_m]
@@ -310,7 +309,7 @@ with tab_mensual:
             iva_comb_real = float(comb_mensual_df["_iva_calc"].sum())
             cant_rec_comb_xml = len(comb_mensual_df)
 
-            # Desglose de tasas para generales (16%, 0%, Exento)
+            # Clasificación DIOT (16%, 0%, Exento)
             col_exento = next((c for c in generales_mensual_df.columns if "exento" in c.lower()), None)
             col_tasa_0 = next((c for c in generales_mensual_df.columns if "0%" in c.lower() or "tasa 0" in c.lower()), None)
 
@@ -332,6 +331,7 @@ with tab_mensual:
             sub_rec_pue_16, iva_rec_pue_16, cant_rec_pue_16 = 0.0, 0.0, 0
             sub_rec_pue_0, cant_rec_pue_0 = 0.0, 0
             sub_rec_pue_exento, cant_rec_pue_exento = 0.0, 0
+            gen_16, gen_0, gen_ex = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
         gastos_manuales_filtrados = [
             g for g in st.session_state.gastos_manuales
@@ -430,10 +430,10 @@ with tab_mensual:
             st.success("✅ **BALANCE PERFECTO:** Tus ingresos y gastos están totalmente amarrados.")
 
         # ==========================================
-        # 8. DESGLOSE GENERAL DETALLADO (INCLUYENDO DIOT / TASAS)
+        # 8. TABLA RESUMEN GENERAL DE OPERACIONES
         # ==========================================
         st.divider()
-        st.subheader("📑 Desglose General de Operaciones y Tasas (DIOT / ISR)")
+        st.subheader("📑 Resumen General de Operaciones")
 
         tabla_desglose = pd.DataFrame([
             {
@@ -537,18 +537,72 @@ with tab_mensual:
         tabla_desglose["No. Facturas"] = pd.to_numeric(tabla_desglose["No. Facturas"], errors="coerce").fillna(0).astype(int)
         st.table(tabla_desglose)
 
-        def convertir_desglose_a_excel(df):
+        def convertir_a_excel(df):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df.to_excel(writer, sheet_name="Desglose Operaciones", index=False)
+                df.to_excel(writer, sheet_name="Datos", index=False)
             return output.getvalue()
 
         st.download_button(
-            label="📊 Descargar Desglose General en Excel",
-            data=convertir_desglose_a_excel(tabla_desglose),
-            file_name="desglose_general_operaciones.xlsx",
+            label="📊 Descargar Resumen General en Excel",
+            data=convertir_a_excel(tabla_desglose),
+            file_name="resumen_general_operaciones.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+        # ==========================================
+        # 9. SECCIÓN DE DIOT Y DESGLOSE POR TASAS CON BOTONES INDEPENDIENTES
+        # ==========================================
+        st.divider()
+        st.subheader("🧾 Desglose y Reportes Independientes para la DIOT (Tasas 16%, 0% y Exentos)")
+
+        col_diot_1, col_diot_2, col_diot_3 = st.columns(3)
+
+        with col_diot_1:
+            st.markdown("#### 🔵 Tasa 16% (IVA Acreditable)")
+            st.metric("Total Gastos Tasa 16%", f"${sub_rec_pue_16:,.2f}", f"{cant_rec_pue_16} facturas")
+            if not gen_16.empty:
+                st.dataframe(gen_16[["UUID", "Receptor/Emisor", "RFC", "SubTotal", "_iva_calc", "Total"]], use_container_width=True)
+                st.download_button(
+                    label="📥 Descargar DIOT Tasa 16% (Excel)",
+                    data=convertir_a_excel(gen_16),
+                    file_name="diot_tasa_16.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_diot_16"
+                )
+            else:
+                st.info("Sin registros al 16% en este período.")
+
+        with col_diot_2:
+            st.markdown("#### 🟢 Tasa 0%")
+            st.metric("Total Gastos Tasa 0%", f"${sub_rec_pue_0:,.2f}", f"{cant_rec_pue_0} facturas")
+            if not gen_0.empty:
+                st.dataframe(gen_0[["UUID", "Receptor/Emisor", "RFC", "SubTotal", "Total"]], use_container_width=True)
+                st.download_button(
+                    label="📥 Descargar DIOT Tasa 0% (Excel)",
+                    data=convertir_a_excel(gen_0),
+                    file_name="diot_tasa_0.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_diot_0"
+                )
+            else:
+                st.info("Sin registros a tasa 0% en este período.")
+
+        with col_diot_3:
+            st.markdown("#### 🟠 Exentos")
+            st.metric("Total Gastos Exentos", f"${sub_rec_pue_exento:,.2f}", f"{cant_rec_pue_exento} facturas")
+            if not gen_ex.empty:
+                st.dataframe(gen_ex[["UUID", "Receptor/Emisor", "RFC", "SubTotal", "Total"]], use_container_width=True)
+                st.download_button(
+                    label="📥 Descargar DIOT Exentos (Excel)",
+                    data=convertir_a_excel(gen_ex),
+                    file_name="diot_exentos.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="dl_diot_ex"
+                )
+            else:
+                st.info("Sin registros exentos en este período.")
+
     else:
         st.info("Carga las Facturas EMITIDAS y RECIBIDAS (archivos obligatorios) para comenzar el análisis mensual.")
 
