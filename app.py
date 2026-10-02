@@ -252,16 +252,73 @@ with tab_mensual:
                 sub_rec_pue_16, iva_rec_pue_16 = 0.0, 0.0
             cant_rec_pue_16 = len(rec_pue_16)
 
-            mask_comb = df_rec_f_i.apply(lambda r: "1510" in str(r.get("ClaveProdServ", "")) or "COMBUSTIBLE" in str(r.get("Conceptos", "")).upper() or "GASOLINA" in str(r.get("Conceptos", "")).upper(), axis=1)
-            rec_pue_comb = df_rec_f_i[mask_comb].copy()
+            # --- CÁLCULO DE COMBUSTIBLES (PUE + REPs DE COMBUSTIBLES) ---
+            def es_gasto_combustible(r):
+                txt = ""
+                for col in ["ClaveProdServ", "Conceptos", "Descripcion", "Concepto"]:
+                    if col in r and pd.notna(r[col]):
+                        txt += str(r[col]) + " "
+                txt = txt.upper()
+                return "1510" in txt or "COMBUSTIBLE" in txt or "GASOLINA" in txt or "DIESEL" in txt
+
+            mask_comb = df_rec_f_i.apply(es_gasto_combustible, axis=1)
+            rec_pue_comb = df_rec_f_i[mask_comb & df_rec_f_i["Metodo pago"].astype(str.lower).str.startswith("pue")].copy()
             
             if not rec_pue_comb.empty:
-                sub_comb = float((pd.to_numeric(rec_pue_comb["Total"], errors="coerce").fillna(0) / 1.16).sum())
-                iva_comb_real = float((sub_comb * 0.16))
-                total_comb = float(rec_pue_comb["Total"].fillna(0).sum())
+                sub_comb_pue = float((pd.to_numeric(rec_pue_comb["Total"], errors="coerce").fillna(0) / 1.16).sum())
+                iva_comb_pue = float(sub_comb_pue * 0.16)
+                total_comb_pue = float(rec_pue_comb["Total"].fillna(0).sum())
+                cant_comb_pue = len(rec_pue_comb)
             else:
-                sub_comb, iva_comb_real, total_comb = 0.0, 0.0, 0.0
-            cant_rec_comb_xml = len(rec_pue_comb)
+                sub_comb_pue, iva_comb_pue, total_comb_pue, cant_comb_pue = 0.0, 0.0, 0.0, 0
+
+            # Incluir REPs que correspondan a facturas de combustibles (PPD pagados en el periodo)
+            sub_comb_rep, iva_comb_rep, total_comb_rep, cant_comb_rep = 0.0, 0.0, 0.0, 0
+            if "df_rec_p_raw" in st.session_state and not st.session_state["df_rec_p_raw"].empty:
+                df_rec_p_raw_full = st.session_state["df_rec_p_raw"].copy()
+                if "Estado" in df_rec_p_raw_full.columns:
+                    df_rec_p_raw_full = df_rec_p_raw_full[df_rec_p_raw_full["Estado"] == "VIGENTE"]
+                
+                if periodo_sel != "Todos los meses" and "Fecha pago" in df_rec_p_raw_full.columns:
+                    df_rec_p_raw_full["Fecha pago"] = pd.to_datetime(df_rec_p_raw_full["Fecha pago"], errors="coerce")
+                    df_rec_p_raw_full = df_rec_p_raw_full[df_rec_p_raw_full["Fecha pago"].dt.month.isin(num_meses)]
+
+                df_rec_f_raw_all = st.session_state["df_rec_f_raw"].copy()
+                mask_comb_global = df_rec_f_raw_all.apply(es_gasto_combustible, axis=1)
+                df_comb_global = df_rec_f_raw_all[mask_comb_global].copy()
+
+                col_id_rel = next((c for c in df_rec_p_raw_full.columns if "idpago" in c.lower() or "docto" in c.lower() or "uuid" in c.lower() and "relacionado" in c.lower()), None)
+                col_imp_pagado = next((c for c in df_rec_p_raw_full.columns if "impago" in c.lower() or "importepagado" in c.lower() or "monto" in c.lower()), None)
+                col_uuid_factura = "UUID" if "UUID" in df_comb_global.columns else None
+
+                if col_id_rel and col_imp_pagado and col_uuid_factura and not df_comb_global.empty:
+                    pagos_por_factura = df_rec_p_raw_full.groupby(col_id_rel)[col_imp_pagado].sum().reset_index()
+                    comb_pagados = pd.merge(
+                        df_comb_global,
+                        pagos_por_factura,
+                        left_on=col_uuid_factura,
+                        right_on=col_id_rel,
+                        how="inner"
+                    )
+                    if not comb_pagados.empty:
+                        total_comb_rep = float(pd.to_numeric(comb_pagados[col_imp_pagado], errors="coerce").fillna(0).sum())
+                        sub_comb_rep = float(total_comb_rep / 1.16)
+                        iva_comb_rep = float(sub_comb_rep * 0.16)
+                        cant_comb_rep = len(comb_pagados)
+
+            gastos_manuales_filtrados = [
+                g for g in st.session_state.gastos_manuales
+                if periodo_sel == "Todos los meses" or g["Periodo"] == periodo_sel
+            ]
+            total_comb_man = float(sum(g["Total"] for g in gastos_manuales_filtrados))
+            sub_comb_man = float(sum(g["Subtotal"] for g in gastos_manuales_filtrados))
+            iva_comb_man = float(sum(g["IVA"] for g in gastos_manuales_filtrados))
+            cant_comb_man = len(gastos_manuales_filtrados)
+
+            sub_comb = sub_comb_pue + sub_comb_rep + sub_comb_man
+            iva_comb_real = iva_comb_pue + iva_comb_rep + iva_comb_man
+            total_comb = total_comb_pue + total_comb_rep + total_comb_man
+            cant_rec_comb = cant_comb_pue + cant_comb_rep + cant_comb_man
 
             col_tasa_0 = next((c for c in df_rec_f_i.columns if "0%" in c.lower() or "tasa 0" in c.lower()), None)
             col_exento = next((c for c in df_rec_f_i.columns if "exento" in c.lower()), None)
@@ -280,25 +337,10 @@ with tab_mensual:
         else:
             desc_rec_pue_16 = 0.0
             sub_rec_pue_16, iva_rec_pue_16, cant_rec_pue_16 = 0.0, 0.0, 0
-            sub_comb, iva_comb_real, total_comb, cant_rec_comb_xml = 0.0, 0.0, 0.0, 0
+            sub_comb, iva_comb_real, total_comb, cant_rec_comb = 0.0, 0.0, 0.0, 0
             sub_rec_pue_0, cant_rec_pue_0 = 0.0, 0
             sub_rec_pue_exento, cant_rec_pue_exento = 0.0, 0
-            rec_pue_16, rec_pue_comb = pd.DataFrame(), pd.DataFrame()
-            rec_pue_0_directo, rec_pue_exento = pd.DataFrame(), pd.DataFrame()
-
-        gastos_manuales_filtrados = [
-            g for g in st.session_state.gastos_manuales
-            if periodo_sel == "Todos los meses" or g["Periodo"] == periodo_sel
-        ]
-        total_comb_man = float(sum(g["Total"] for g in gastos_manuales_filtrados))
-        sub_comb_man = float(sum(g["Subtotal"] for g in gastos_manuales_filtrados))
-        iva_comb_man = float(sum(g["IVA"] for g in gastos_manuales_filtrados))
-        cant_rec_comb_man = len(gastos_manuales_filtrados)
-
-        sub_comb = sub_comb + sub_comb_man
-        iva_comb_real = iva_comb_real + iva_comb_man
-        total_comb = total_comb + total_comb_man
-        cant_rec_comb = cant_rec_comb_xml + cant_rec_comb_man
+            rec_pue_16, rec_pue_0_directo, rec_pue_exento = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
         if not df_rec_p.empty:
             total_rec_rep = float(df_rec_p["Monto"].dropna().sum()) if "Monto" in df_rec_p.columns else 0.0
@@ -455,7 +497,7 @@ with tab_mensual:
                 "Total (Neto Banco)": f"${sub_rec_pue_exento:,.2f}",
             },
             {
-                "Concepto": "6. Combustibles (XML + Manuales - 16% s/Total)",
+                "Concepto": "6. Combustibles (XML PUE + REPs PPD + Manuales)",
                 "No. Facturas": cant_rec_comb,
                 "Subtotal (Base ISR)": f"${sub_comb:,.2f}",
                 "Descuentos": "$0.00",
@@ -586,6 +628,40 @@ with tab_mensual:
                 ]
             )
 
+        # REPs de combustibles para la DIOT mensual
+        diot_comb_rep = pd.DataFrame()
+        if "df_rec_p_raw" in st.session_state and not st.session_state["df_rec_p_raw"].empty:
+            df_rec_p_raw_full = st.session_state["df_rec_p_raw"].copy()
+            if "Estado" in df_rec_p_raw_full.columns:
+                df_rec_p_raw_full = df_rec_p_raw_full[df_rec_p_raw_full["Estado"] == "VIGENTE"]
+            if periodo_sel != "Todos los meses" and "Fecha pago" in df_rec_p_raw_full.columns:
+                df_rec_p_raw_full["Fecha pago"] = pd.to_datetime(df_rec_p_raw_full["Fecha pago"], errors="coerce")
+                df_rec_p_raw_full = df_rec_p_raw_full[df_rec_p_raw_full["Fecha pago"].dt.month.isin(num_meses)]
+            
+            df_rec_f_raw_all = st.session_state["df_rec_f_raw"].copy()
+            mask_comb_global = df_rec_f_raw_all.apply(es_gasto_combustible, axis=1)
+            df_comb_global = df_rec_f_raw_all[mask_comb_global].copy()
+
+            col_id_rel = next((c for c in df_rec_p_raw_full.columns if "idpago" in c.lower() or "docto" in c.lower() or "uuid" in c.lower() and "relacionado" in c.lower()), None)
+            col_imp_pagado = next((c for c in df_rec_p_raw_full.columns if "impago" in c.lower() or "importepagado" in c.lower() or "monto" in c.lower()), None)
+            col_uuid_factura = "UUID" if "UUID" in df_comb_global.columns else None
+
+            if col_id_rel and col_imp_pagado and col_uuid_factura and not df_comb_global.empty:
+                pagos_por_factura = df_rec_p_raw_full.groupby(col_id_rel)[col_imp_pagado].sum().reset_index()
+                comb_pagados_diot = pd.merge(
+                    df_comb_global,
+                    pagos_por_factura,
+                    left_on=col_uuid_factura,
+                    right_on=col_id_rel,
+                    how="inner"
+                )
+                if not comb_pagados_diot.empty:
+                    diot_comb_rep = comb_pagados_diot[[col_rfc_emisor, col_nom_emisor, col_imp_pagado]].copy()
+                    diot_comb_rep.rename(columns={col_imp_pagado: "Total"}, inplace=True)
+                    diot_comb_rep["SubTotal"] = diot_comb_rep["Total"] / 1.16
+                    diot_comb_rep["IVA_16"] = diot_comb_rep["SubTotal"] * 0.16
+                    diot_comb_rep["SubTotal"] = diot_comb_rep["IVA_16"] / 0.16
+
         if not rec_pue_comb.empty:
             diot_comb = rec_pue_comb[
                 [col_rfc_emisor, col_nom_emisor, "Total"]
@@ -699,7 +775,7 @@ with tab_mensual:
             )
 
         df_diot_consolidado = pd.concat(
-            [diot_gral, diot_comb, diot_man, diot_p, diot_egr], ignore_index=True
+            [diot_gral, diot_comb, diot_comb_rep, diot_man, diot_p, diot_egr], ignore_index=True
         )
 
         if not df_diot_consolidado.empty:
